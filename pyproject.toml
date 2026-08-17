@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jaxpotts"
+version = "0.1.0"
+description = "Potts model (21-state MRF) inference over protein MSAs in JAX, for large single GPUs. Pseudo-likelihood (plm) and Boltzmann/PCD (bm) under one set of conventions."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "AGPL-3.0-or-later" }
+authors = [{ name = "James Bowden" }]
+dependencies = [
+    "jax>=0.4.30",
+    "optax>=0.2.2",
+    "numpy>=1.26",
+    "msgpack>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+profiling = ["pynvml>=11.5", "psutil>=5.9"]
+jaxtyping = ["jaxtyping>=0.2.34"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jaxpotts"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E741"]  # ambiguous variable names (a, b, i, j are natural here)
+
+[tool.pytest.ini_options]
+markers = [
+    "gpu: marks tests that require a GPU (deselect with '-m \"not gpu\"')",
+    "slow: marks slow tests",
+]
+testpaths = ["tests"]
