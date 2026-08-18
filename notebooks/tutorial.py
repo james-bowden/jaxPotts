@@ -431,29 +431,44 @@ plt.tight_layout(); plt.show()
 # %% [markdown]
 # ### 7b. Couplings, contacts, and the payoff
 #
-# The **coupling values** are strongly correlated between the two methods (left) —
-# they largely agree on *which* pairs interact — though not identical, since plmDCA
-# and bmDCA are different estimators that shrink couplings differently. What matters
-# for structure is the **contact map**: the per-pair coupling strength `‖J_ij‖`,
-# zero-sum-gauged and APC-corrected (the standard DCA score). Both methods give nearly
-# the same map, and the strongest predictions land squarely on the **true contacts**
-# from the crystal structure (red circles).
+# The **amino-acid coupling values** (grey, left) are strongly correlated between the
+# two methods — they largely agree on *which* residue pairs interact. The **gap-state**
+# couplings (purple) split off into a band at bmDCA ≈ 0; we explain that just below.
+# What matters for structure is the **contact map**: the per-pair coupling strength
+# `‖J_ij‖`, zero-sum-gauged and APC-corrected (the standard DCA score) — which uses only
+# the amino-acid couplings. Both methods give nearly the same map, and the strongest
+# predictions land squarely on the **true contacts** from the crystal structure
+# (red circles).
 
 # %%
 from scipy.stats import pearsonr
 
-def coupling_vec(Jz):                    # off-diagonal (i<j) blocks, amino acids
-    return Jz.transpose(0, 2, 1, 3)[iu][:, :20, :20].ravel()
+# Off-diagonal (i<j) coupling blocks, split into amino-acid entries and gap-state
+# entries (any entry touching state 20 = the gap).
+def coupling_blocks(Jz):
+    return Jz.transpose(0, 2, 1, 3)[iu]            # (n_pairs, 21, 21)
 
-cv_plm, cv_bm = coupling_vec(Jz_plm), coupling_vec(Jz_bm)
+Bp, Bb = coupling_blocks(Jz_plm), coupling_blocks(Jz_bm)
+gap_block = np.zeros((21, 21), bool)
+gap_block[gauge.GAP, :] = gap_block[:, gauge.GAP] = True
+is_gap = np.broadcast_to(gap_block, Bp.shape).ravel()
+cv_plm, cv_bm = Bp.ravel(), Bb.ravel()
+r_aa = pearsonr(cv_plm[~is_gap], cv_bm[~is_gap])[0]
+r_gap = pearsonr(cv_plm[is_gap], cv_bm[is_gap])[0]
 ti, tj = np.where(np.triu(contacts, 1))   # true-contact pairs, for overlay
 
 fig, axes = plt.subplots(1, 3, figsize=(13.5, 4.2))
-axes[0].scatter(cv_plm, cv_bm, s=2, alpha=0.08, color=C["data"], rasterized=True)
 lim = max(np.abs(cv_plm).max(), np.abs(cv_bm).max())
-axes[0].plot([-lim, lim], [-lim, lim], color=C["data"], lw=1)
+axes[0].plot([-lim, lim], [-lim, lim], color="0.6", lw=1, zorder=0)
+axes[0].scatter(cv_plm[~is_gap], cv_bm[~is_gap], s=2, alpha=0.08, color=C["data"],
+                rasterized=True, label=f"amino acid  (r={r_aa:.2f})")
+axes[0].scatter(cv_plm[is_gap], cv_bm[is_gap], s=2, alpha=0.15, color="#CC79A7",
+                rasterized=True, label=f"gap state  (r={r_gap:.2f})")
 axes[0].set_xlabel("plmDCA $J_{ij}(a,b)$"); axes[0].set_ylabel("bmDCA $J_{ij}(a,b)$")
-axes[0].set_title(f"Couplings agree: Pearson {pearsonr(cv_plm, cv_bm)[0]:.2f}")
+axes[0].set_title("Couplings agree (amino acids); gaps differ")
+leg = axes[0].legend(loc="upper left", fontsize=7, framealpha=0.9, markerscale=3)
+for h in leg.legend_handles:
+    h.set_alpha(1.0)
 for ax, S, lbl in [(axes[1], S_plm_map, "plmDCA"), (axes[2], S_bm_map, "bmDCA")]:
     im = ax.imshow(S, cmap=SEQ, vmax=np.percentile(S, 99), interpolation="nearest")
     ax.scatter(tj, ti, s=10, facecolors="none", edgecolors="#d62728", linewidths=0.5)
@@ -461,6 +476,18 @@ for ax, S, lbl in [(axes[1], S_plm_map, "plmDCA"), (axes[2], S_bm_map, "bmDCA")]
     ax.set_xlabel("position j"); ax.set_ylabel("position i")
     plt.colorbar(im, ax=ax, fraction=0.046)
 plt.tight_layout(); plt.show()
+
+# %% [markdown]
+# **Why the gap state splits off.** About 9% of coupling entries involve the gap
+# "state" (index 20), and there the two methods disagree sharply (r ≈ 0.4 vs ≈ 0.98 for
+# amino acids). plmDCA treats the gap as a full 21st amino acid and learns real
+# couplings to it, because gappiness is strongly correlated across columns — indels span
+# consecutive positions, and truncated sequences are gappy throughout. bmDCA instead
+# captures the gap statistics through the single-site **fields** and, with pseudocounts
+# on the target frequencies, drives the gap **couplings** to ≈ 0 (the horizontal band).
+# This is an artefact of how gaps are handled, not a disagreement about the amino-acid
+# couplings that carry structural signal — and the contact score above uses only the
+# amino-acid part, where the two methods agree.
 
 # %% [markdown]
 # This is the payoff promised in §2 — and now we can *measure* it. Rank every position
