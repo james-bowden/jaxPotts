@@ -56,6 +56,16 @@ conventions. The head-to-head correctness and profiling comparison (against
 CCMpred, CCMpredPy, and a PyTorch plmDCA) is in
 [`notebooks/comparison.ipynb`](notebooks/comparison.ipynb).
 
+## Notebooks
+
+- [`notebooks/tutorial.ipynb`](notebooks/tutorial.ipynb) — a self-contained,
+  from-scratch **tutorial** on Potts models and DCA: what a Potts model is and why
+  it suits protein MSAs, how plmDCA and bmDCA work step by step, and a fit-and-compare
+  on one alignment (fields, couplings, two-/three-point correlations, and contact
+  prediction against a crystal structure). Start here.
+- [`notebooks/comparison.ipynb`](notebooks/comparison.ipynb) — the head-to-head
+  correctness and profiling benchmark against the reference tools.
+
 ## Conventions & decisions
 
 The numerical conventions (alphabet, gauge, index order, energy sign) were fixed
