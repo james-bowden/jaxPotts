@@ -103,10 +103,21 @@ axes[1].set_xlabel("position"); axes[1].set_ylabel("1 − entropy/ln20"); axes[1
 plt.tight_layout(); plt.show()
 
 # %% [markdown]
-# To *see* coevolution, pick the pair of columns whose amino-acid usage is most
-# statistically dependent (highest mutual information), and look at their joint
-# frequency table. If the two columns were independent, the table would be the outer
-# product of the two column profiles; the departure from that is coevolution.
+# To *see* coevolution directly, take the pair of columns whose amino-acid usage is
+# most statistically dependent (highest **mutual information**) and lay their joint
+# frequency table next to the table we would expect if the two columns varied
+# **independently** — the outer product of their two single-column profiles,
+# $f_i(a)\,f_j(b)$. We keep only the amino acids that actually occur at each column, so
+# the tables are small and readable, and print each cell as a percentage. The three
+# panels are:
+#
+# 1. **observed** — how often each pair (`a` at column *i*, `b` at column *j*) really
+#    co-occurs across the alignment;
+# 2. **if independent** — the same table rebuilt from the two columns' profiles alone,
+#    pretending they don't influence each other;
+# 3. **observed − independent** — the difference. **Red** cells occur *more* often than
+#    independence predicts, **blue** cells *less* often. A non-zero difference panel is
+#    coevolution — precisely the signal the Potts couplings will learn.
 
 # %%
 f2 = np.asarray(bm.two_point_freqs(X, w_j))    # (L, q, L, q) pairwise frequencies
@@ -119,18 +130,45 @@ np.fill_diagonal(mi, 0.0)
 i0, j0 = np.unravel_index(np.argmax(mi), mi.shape)
 AA = "ARNDCQEGHILKMFPSTWYV"
 
-fig, axes = plt.subplots(1, 2, figsize=(11, 4))
-joint = fab[i0, j0]                              # (20, 20) observed joint
-indep = fa[i0, 0, :, 0][:, None] * fb[0, j0, 0, :][None, :]  # outer product if independent
-for ax, M, ttl in [(axes[0], joint, f"observed joint  P(col {i0}, col {j0})"),
-                   (axes[1], joint - indep, "observed − independent  (coevolution)")]:
-    im = ax.imshow(M, cmap=SEQ if ax is axes[0] else DIV, aspect="equal",
-                   vmin=(-np.abs(joint - indep).max() if ax is axes[1] else None),
-                   vmax=(np.abs(joint - indep).max() if ax is axes[1] else None))
-    ax.set_xticks(range(20)); ax.set_xticklabels(AA, fontsize=6)
-    ax.set_yticks(range(20)); ax.set_yticklabels(AA, fontsize=6)
+# Keep only the amino acids that actually appear (>2%) at each column, most common first,
+# so the 20x20 table collapses to a small, legible block instead of a sea of zeros.
+fi, fj = f1[i0, :20], f1[j0, :20]
+ai = np.where(fi > 0.02)[0][np.argsort(-fi[np.where(fi > 0.02)])]
+aj = np.where(fj > 0.02)[0][np.argsort(-fj[np.where(fj > 0.02)])]
+labi, labj = [AA[a] for a in ai], [AA[a] for a in aj]
+
+joint = fab[i0, j0][np.ix_(ai, aj)]        # observed P(a at col i0, b at col j0)
+indep = np.outer(fi[ai], fj[aj])           # what independence predicts (outer product)
+diff = joint - indep                       # the departure = coevolution
+
+
+def _table(ax, M, cmap, vmin, vmax, title, diverging=False):
+    im = ax.imshow(M, cmap=cmap, vmin=vmin, vmax=vmax, aspect="equal")
+    ax.set_xticks(range(len(labj))); ax.set_xticklabels(labj)
+    ax.set_yticks(range(len(labi))); ax.set_yticklabels(labi)
     ax.set_xlabel(f"amino acid at col {j0}"); ax.set_ylabel(f"amino acid at col {i0}")
-    ax.set_title(ttl); ax.grid(False); plt.colorbar(im, ax=ax, fraction=0.046)
+    ax.set_title(title); ax.grid(False)
+    span = vmax if not diverging else vmax
+    for r in range(M.shape[0]):
+        for c in range(M.shape[1]):
+            v = M[r, c]
+            if diverging:
+                tc = "white" if abs(v) > 0.6 * span else "0.25"
+                txt = f"{100 * v:+.0f}"
+            else:
+                tc = "white" if v < 0.5 * span else "black"
+                txt = f"{100 * v:.0f}"
+            ax.text(c, r, txt, ha="center", va="center", fontsize=7, color=tc)
+    plt.colorbar(im, ax=ax, fraction=0.046, label="frequency (%)" if not diverging else "Δ (%)")
+
+
+fig, axes = plt.subplots(1, 3, figsize=(14, 4.4))
+vmax_j = max(joint.max(), indep.max())          # shared scale so the two are comparable
+vmax_d = np.abs(diff).max()
+_table(axes[0], joint, SEQ, 0, vmax_j, "observed joint  P(a, b)")
+_table(axes[1], indep, SEQ, 0, vmax_j, "if independent  f_i(a)·f_j(b)")
+_table(axes[2], diff, DIV, -vmax_d, vmax_d, "observed − independent  (coevolution)", diverging=True)
+fig.suptitle(f"Most-coupled column pair (cols {i0} & {j0}); cells are percentages", y=1.02)
 plt.tight_layout(); plt.show()
 
 # %% [markdown]
