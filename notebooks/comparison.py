@@ -320,21 +320,48 @@ print(f"plm vs bm contact scores (canonical): Spearman={spearmanr(S_plm[IU],S_bm
 fit_plm, _, _ = two_point_fit(p_plm.h, J_plm, 3)
 print(f"two-point fit to data:  plm = {fit_plm:.4f}   bm = {fit_bm:.4f}")
 
-fig, ax = plt.subplots(figsize=(4.5, 4.5))
-ax.scatter(a_plm, a_bm, s=1, alpha=0.15, rasterized=True)
+# Split the entries into amino-acid couplings and gap-state couplings: each (i<j)
+# block is 21x21, and any entry touching the gap state (row or col 20) is "gap".
+q1 = J_plm.shape[1]
+gap_block = np.zeros((q1, q1), bool)
+gap_block[gauge.GAP, :] = True
+gap_block[:, gauge.GAP] = True
+gap_flat = np.broadcast_to(gap_block, (len(IU[0]), q1, q1)).ravel()   # matches zsg_offdiag order
+aa = ~gap_flat
+r_aa = pearsonr(a_plm[aa], a_bm[aa])[0]
+r_gap = pearsonr(a_plm[gap_flat], a_bm[gap_flat])[0]
+print(f"  amino-acid entries: Pearson={r_aa:.4f}   gap-state entries: Pearson={r_gap:.4f}  "
+      f"({100*gap_flat.mean():.0f}% of entries touch a gap)")
+
+fig, ax = plt.subplots(figsize=(4.7, 4.7))
 lim = max(np.abs(a_plm).max(), np.abs(a_bm).max())
-ax.plot([-lim, lim], [-lim, lim], "r-", lw=0.8)
+ax.plot([-lim, lim], [-lim, lim], color="0.6", lw=0.8, zorder=0)
+ax.scatter(a_plm[aa], a_bm[aa], s=1, alpha=0.15, color="#4d4d4d", rasterized=True,
+           label=f"amino acid  (r={r_aa:.2f})")
+ax.scatter(a_plm[gap_flat], a_bm[gap_flat], s=1, alpha=0.25, color="#D55E00", rasterized=True,
+           label=f"gap state  (r={r_gap:.2f})")
 ax.set_xlabel("plm  $J$ (ZSG)"); ax.set_ylabel("bm  $J$ (ZSG)")
 ax.set_title(f"plm vs bm couplings: Pearson {pearsonr(a_plm,a_bm)[0]:.3f}")
+leg = ax.legend(loc="upper left", fontsize=8, framealpha=0.9, markerscale=4)
+for h in leg.legend_handles:
+    h.set_alpha(1.0)
 plt.tight_layout(); plt.show()
 
 # %% [markdown]
 # **1c conclusion.** plm and bm recover strongly correlated coupling patterns and
-# near-identical top contacts, but they are not identical estimators: bm (which
-# directly matches two-point statistics) reproduces the data's connected
-# correlations better, while plm is a faster convex surrogate. The magnitudes differ
-# (plm couplings are shrunk differently by its regularisation), which is why the
-# scatter has a slope ≠ 1 even though the rank agreement is high.
+# near-identical top contacts, but they are not identical estimators. The scatter
+# splits cleanly into two clouds. The **amino-acid** couplings — the ones that carry
+# structural signal and feed the contact score — agree tightly (Pearson ≈ 0.98) along
+# the diagonal. The visible **horizontal band at bm ≈ 0** is the **gap-state**
+# couplings: plm treats the gap as a full 21st state and, because gappiness is
+# strongly correlated across columns (indels span consecutive positions; truncated
+# sequences are gappy throughout), it learns real gap couplings of the same magnitude
+# as its amino-acid ones. bm instead reproduces the gap statistics through the gap
+# *fields* and, with pseudocounts on the target frequencies, drives the gap
+# *couplings* to ≈ 0. That single difference — ~9% of entries, all touching a gap —
+# is what pulls the overall Pearson down to ≈ 0.92; on the amino-acid couplings the
+# two objectives essentially agree. (Both still reproduce the data's connected
+# correlations well, bm slightly better as the estimator that targets them directly.)
 
 # %% [markdown]
 # ### 1d. `plm` vs hnisonoff/potts (a third, independent PyTorch implementation)
